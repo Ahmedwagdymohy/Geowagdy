@@ -49,7 +49,7 @@ class MainWindow(QMainWindow):
     """
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Function Intersection Solver")
+        self.setWindowTitle("Geowagdy")
 
         # Main widget and layout
         main_widget = QWidget()
@@ -72,7 +72,7 @@ class MainWindow(QMainWindow):
         input_layout.addWidget(self.edit_f2)
 
         # Solve button
-        self.solve_button = QPushButton("Solve & Plot")
+        self.solve_button = QPushButton("Solve + Plot")
         self.solve_button.clicked.connect(self.on_solve_clicked)
 
         # Plot canvas
@@ -84,6 +84,8 @@ class MainWindow(QMainWindow):
         main_layout.addWidget(self.canvas)
 
         self.setCentralWidget(main_widget)
+        self.setMinimumSize(800, 600)
+
 
     def on_solve_clicked(self):
         """
@@ -212,6 +214,7 @@ class MainWindow(QMainWindow):
         msg_box.setText(message)
         msg_box.setWindowTitle("Error")
         msg_box.exec_()
+        
 
     def show_info_message(self, message):
         """Display an informational message box."""
@@ -220,6 +223,7 @@ class MainWindow(QMainWindow):
         msg_box.setText(message)
         msg_box.setWindowTitle("Information")
         msg_box.exec_()
+        
 
     def string_to_sympy_expr(self, expr_str):
         """
