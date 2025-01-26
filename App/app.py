@@ -90,8 +90,8 @@ class MainWindow(QMainWindow):
     def on_solve_clicked(self):
         """
         Slot triggered when the user clicks the "Solve & Plot" button.
-        Attempts to parse the two functions, solve for intersection,
-        and plot the functions along with the solution point if it exists.
+        Attempts to parse the two functions, solve for all real intersections,
+        and plot the functions along with the solution points if they exist.
         """
         f1_str = self.edit_f1.text().strip()
         f2_str = self.edit_f2.text().strip()
@@ -123,32 +123,43 @@ class MainWindow(QMainWindow):
             if not real_solutions:
                 # No real intersection
                 self.show_info_message("No real intersection found. Plotting both functions anyway.")
-                self.plot_functions(expr_f1, expr_f2, intersection=None)
+                self.plot_functions(expr_f1, expr_f2, intersections=[])
             else:
-                # Use the first real solution
-                intersection_x = float(real_solutions[0])
-                intersection_y = float(expr_f1.subs(x, intersection_x))
-                self.plot_functions(expr_f1, expr_f2, (intersection_x, intersection_y))
+                # Convert each solution to float x and float y
+                intersections = []
+                for val in real_solutions:
+                    float_x = float(val)
+                    float_y = float(expr_f1.subs(x, float_x))
+                    intersections.append((float_x, float_y))
+
+                # Plot the functions and all intersection points
+                self.plot_functions(expr_f1, expr_f2, intersections=intersections)
 
         except Exception as e:
             # Show error message if any exception occurs
             err_msg = f"An error occurred:\n{traceback.format_exc()}"
             self.show_error_message(err_msg)
 
-    def plot_functions(self, expr_f1, expr_f2, intersection=None):
+    def plot_functions(self, expr_f1, expr_f2, intersections):
         """
         Clears the canvas and plots the two functions over a chosen range.
-        Marks and annotates the intersection point if intersection is not None.
+        Marks and annotates all intersection points in `intersections` if not empty.
+
+        :param expr_f1: Sympy expression for f1(x)
+        :param expr_f2: Sympy expression for f2(x)
+        :param intersections: list of (x, y) real intersection points. May be empty.
         """
         self.canvas.axes.clear()
         import numpy as np
         x_sym = sympy.Symbol('x', real=True)
 
-        # Choose the x-range
-        if intersection is not None:
-            sol_x, sol_y = intersection
-            x_min = sol_x - 5
-            x_max = sol_x + 5
+        # Decide the x-range for plotting
+        if intersections:
+            # If we have intersections, pick range from min_x - 2 to max_x + 2
+            xs = [pt[0] for pt in intersections]
+            min_sol_x, max_sol_x = min(xs), max(xs)
+            x_min = min_sol_x - 5
+            x_max = max_sol_x + 5
         else:
             # Default range if no intersection
             x_min, x_max = -10, 10
@@ -182,18 +193,20 @@ class MainWindow(QMainWindow):
         self.canvas.axes.axhline(0, color='black', linewidth=0.8)
         self.canvas.axes.axvline(0, color='black', linewidth=0.8)
 
-        # If an intersection was found, mark it
-        if intersection is not None:
-            (sol_x, sol_y) = intersection
-            self.canvas.axes.plot(sol_x, sol_y, 'ro')  # red dot
-            annotation_text = f"Solution: x={sol_x:.4f}, y={sol_y:.4f}"
-            self.canvas.axes.annotate(
-                annotation_text,
-                xy=(sol_x, sol_y),
-                xytext=(sol_x, sol_y + (sol_y * 0.1 if sol_y != 0 else 0.5)),
-                arrowprops=dict(facecolor='black', shrink=0.05),
-                ha='center'
-            )
+        # If we have intersection points, mark them all
+        from adjustText import adjust_text
+
+        texts = []
+        for i, (sol_x, sol_y) in enumerate(intersections, start=1):
+            self.canvas.axes.plot(sol_x, sol_y, 'ro')
+            annotation_text = f"Solution {i}: x={sol_x:.4f}, y={sol_y:.4f}"
+            txt = self.canvas.axes.text(sol_x, sol_y, annotation_text)
+            texts.append(txt)
+        
+        # After plotting all text, call:
+        adjust_text(texts, ax=self.canvas.axes)
+
+
 
         self.canvas.axes.set_xlabel("x")
         self.canvas.axes.set_ylabel("y")
