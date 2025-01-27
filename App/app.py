@@ -1,16 +1,12 @@
 import sys
-import math
-import traceback
 import re
+import traceback
+import webbrowser
 
 from PySide2.QtCore import Qt, QTimer
 from PySide2.QtGui import QFont, QPixmap
 from PySide2.QtWidgets import (
     QApplication,
-    QSplashScreen,
-    QProgressBar,
-    QDesktopWidget,
-    QMainWindow,
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
@@ -19,9 +15,12 @@ from PySide2.QtWidgets import (
     QPushButton,
     QMessageBox,
     QTabWidget,
-    QTabBar,
-    QMenuBar,
-    QAction
+    QAction,
+    QMainWindow,
+    QProgressBar,
+    QDesktopWidget,
+    QFileDialog,
+    QMenuBar
 )
 
 import sympy
@@ -35,9 +34,13 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
 from matplotlib.figure import Figure
 
 ##############################################################################
-# 1) A reusable PlotWidget class (replacing your old MainWindow code).
-#    Inherits from QWidget, so we can embed it in a tab.
+# Color palette references
+#   - Dark background: #102B3F
+#   - Light backgrounds: #E2CFEA, #A6ECE0
+#   - Accent color: #DDA77B
 ##############################################################################
+
+
 class MplCanvas(FigureCanvasQTAgg):
     """A custom canvas to display matplotlib plots within a PySide2 widget."""
     def __init__(self, parent=None, width=5, height=4, dpi=100):
@@ -49,12 +52,13 @@ class MplCanvas(FigureCanvasQTAgg):
 
 class PlotWidget(QWidget):
     """
-    A widget for:
-      - Two QLineEdits to input functions.
+    A widget (for a single tab) that:
+      - Has two QLineEdits to input functions.
       - A "Solve + Plot" button.
       - An embedded Matplotlib canvas.
-    
-    This was refactored from your old MainWindow code so it can be used as a tab.
+      - A method to export the plot as PNG/JPEG.
+
+    Each PlotWidget is independent (unique lines, button, canvas).
     """
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -65,10 +69,12 @@ class PlotWidget(QWidget):
         # Row for function inputs
         input_layout = QHBoxLayout()
         self.label_f1 = QLabel("f1(x):")
+        self.label_f1.setStyleSheet("font-weight: bold; font-size: 18px;")
         self.edit_f1 = QLineEdit()
         self.edit_f1.setPlaceholderText("e.g. 5x + 3 or 5*x + 3")
 
         self.label_f2 = QLabel("f2(x):")
+        self.label_f2.setStyleSheet("font-weight: bold; font-size: 18px;")
         self.edit_f2 = QLineEdit()
         self.edit_f2.setPlaceholderText("e.g. 2x or 2*x")
 
@@ -79,8 +85,28 @@ class PlotWidget(QWidget):
 
         # Solve button
         self.solve_button = QPushButton("Solve + Plot")
-        # Example button styling
-        self.solve_button.setStyleSheet("background-color: #4CAF50; color: white; padding: 6px;")
+        # Example button styling: background #DDA77B, hovered #A6ECE0
+        self.solve_button.setStyleSheet("""
+            QPushButton {
+                background-color: #131515;
+                color: white;
+                padding: 6px;
+                font-weight: bold;
+                border-radius: 5px;
+                border-style: outset;
+                applyShadowOn= "hover", 
+                animateShadow = True, 
+                blurRadius = 150, 
+                animateShadowDuration = 500,
+                xOffset = 0,
+                yOffset = 0
+            )
+
+            }
+            QPushButton:hover {
+                background-color: #A6ECE0;
+            }
+        """)
 
         # Plot canvas
         self.canvas = MplCanvas(self, width=5, height=4, dpi=100)
@@ -173,7 +199,7 @@ class PlotWidget(QWidget):
         self.canvas.axes.axhline(0, color='black', linewidth=0.8)
         self.canvas.axes.axvline(0, color='black', linewidth=0.8)
 
-        # Mark intersections
+        # Mark intersectionsfont-size: 18px;
         if intersections:
             from adjustText import adjust_text
             texts = []
@@ -191,12 +217,33 @@ class PlotWidget(QWidget):
         self.canvas.draw()
 
     def clear_plot(self):
+        """Clear the axes."""
         self.canvas.axes.clear()
         self.canvas.draw()
 
-    ####################################################################
+    ############################################
+    # Export plot feature
+    ############################################
+    def export_plot(self):
+        """
+        Allows the user to choose a file name and export the current Matplotlib
+        figure to PNG or JPEG (or other supported formats).
+        """
+        options = QFileDialog.Options()
+        file_name, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export Plot",
+            "",
+            "PNG Files (*.png);;JPEG Files (*.jpg *.jpeg);;All Files (*)",
+            options=options
+        )
+        if file_name:
+            self.canvas.figure.savefig(file_name, dpi=300)
+            self.show_info_message(f"Plot exported to:\n{file_name}")
+
+    ############################################
     # Utility / Helper methods
-    ####################################################################
+    ############################################
     def show_error_message(self, msg):
         QMessageBox.critical(self, "Error", msg, QMessageBox.Ok)
 
@@ -222,63 +269,91 @@ class PlotWidget(QWidget):
         expr_sympy = parse_expr(expr_str, local_dict=local_dict, transformations=transformations)
         return expr_sympy
 
-##############################################################################
-# 2) The MainWindow that holds a QTabWidget. Each tab is a PlotWidget instance.
-##############################################################################
+
 class MainWindow(QMainWindow):
+    """
+    Main window with a QTabWidget. Each tab is a PlotWidget instance.
+    Also includes menu actions for creating new tabs and exporting the current tab's plot.
+    """
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("GeoWagdy with Tabs")
+        self.setWindowTitle("GeoWagdy")
         self.setMinimumSize(1200, 800)
 
-        # Create a QTabWidget
-        self.tab_widget = QTabWidget()
-        # Apply the style for QTabWidget and QTabBar (from your reference)
-        self.tab_widget.setStyleSheet("""
-            QTabWidget::pane { /* The tab widget frame */
-                border-top: 2px solid #C2C7CB;
-            }
-            QTabWidget::tab-bar {
-                left: 5px; /* move to the right by 5px */
-            }
-            QTabBar::tab {
-                background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
-                                            stop: 0 #E1E1E1, stop: 0.4 #DDDDDD,
-                                            stop: 0.5 #D8D8D8, stop: 1.0 #D3D3D3);
-                border: 2px solid #C4C4C3;
-                border-bottom-color: #C2C7CB; /* same as the pane color */
-                border-top-left-radius: 4px;
-                border-top-right-radius: 4px;
-                min-width: 8ex;
-                padding: 2px;
-            }
-            QTabBar::tab:selected, QTabBar::tab:hover {
-                background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
-                                            stop: 0 #fafafa, stop: 0.4 #f4f4f4,
-                                            stop: 0.5 #e7e7e7, stop: 1.0 #fafafa);
-            }
-            QTabBar::tab:selected {
-                border-color: #9B9B9B;
-                border-bottom-color: #C2C7CB; /* same as pane color */
-            }
-            QTabBar::tab:!selected {
-                margin-top: 2px; /* make non-selected tabs look smaller */
+        # **Apply a background color** (#102B3F) to the entire QMainWindow
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #102B3F;
             }
         """)
 
-        # Make the tab widget the central widget of the main window
+        # Create a QTabWidget as the central widget
+        self.tab_widget = QTabWidget()
+        # Apply the style for QTabWidget/QTabBar using your color palette
+        self.tab_widget.setStyleSheet("""
+            QTabWidget::pane {
+                border-top: 2px solid #E2CFEA;
+                background: #A6ECE0;
+            }
+            QTabWidget::tab-bar {
+                left: 5px;
+            }
+            QTabBar::tab {
+                background: #71677C;
+                border: 2px solid #71677C;
+                border-bottom-color: #E2CFEA; /* same as the pane color */
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                min-width: 8ex;
+                padding: 4px;
+                margin: 2px;
+                font-weight: bold;
+            }
+            QTabBar::tab:selected, QTabBar::tab:hover {
+                background: #E2CFEA;
+            }
+            QTabBar::tab:selected {
+                border-color: #DDA77B;
+                border-bottom-color: #E2CFEA;
+            }
+            QTabBar::tab:!selected {
+                margin-top: 2px;
+            }
+        """)
+
         self.setCentralWidget(self.tab_widget)
 
-        # We'll add an initial tab
+        # Add an initial tab
         self.add_new_tab()
 
-        # We can optionally add a menu or a button to create new tabs
+        # Menu Bar
         menubar = self.menuBar()
+
         file_menu = menubar.addMenu("File")
 
+        # New Tab action
         new_tab_action = QAction("New Tab", self)
         new_tab_action.triggered.connect(self.add_new_tab)
         file_menu.addAction(new_tab_action)
+
+        # Export Plot action
+        export_action = QAction("Export Plot", self)
+        export_action.triggered.connect(self.export_current_tab_plot)
+        file_menu.addAction(export_action)
+
+
+
+
+        #######################################
+        #adding new help tab
+        ######################################
+        help_menu = menubar.addMenu("Help")
+        open_help_action = QAction("Open Help Link", self)
+    
+        help_url = "https://github.com/Ahmedwagdymohy/Geowagdy"
+        open_help_action.triggered.connect(lambda: webbrowser.open(help_url))
+
+        help_menu.addAction(open_help_action)
 
     def add_new_tab(self):
         """Create a new PlotWidget and add it as a new tab."""
@@ -286,14 +361,23 @@ class MainWindow(QMainWindow):
         index = self.tab_widget.addTab(new_plot_widget, f"Plot {self.tab_widget.count() + 1}")
         self.tab_widget.setCurrentIndex(index)
 
-##############################################################################
-# 3) The SplashScreen logic (with progress bar), then showing the MainWindow.
-##############################################################################
+    def export_current_tab_plot(self):
+        """Call the 'export_plot()' method on the currently active PlotWidget."""
+        current_widget = self.tab_widget.currentWidget()
+        if isinstance(current_widget, PlotWidget):
+            current_widget.export_plot()
+
+
+
+
+
+
+
 class SplashScreen(QWidget):
+    """A splash screen with progress bar, showing for a few seconds, then revealing the MainWindow."""
     def __init__(self, width, height, main_window):
         super().__init__()
-
-        self.main_window = main_window  # reference to the real main window
+        self.main_window = main_window
 
         screen_geometry = QApplication.primaryScreen().geometry()
         x = (screen_geometry.width() - width) // 2
@@ -306,22 +390,20 @@ class SplashScreen(QWidget):
 
         # Example image
         pixmap = QPixmap("1.png")
-        if pixmap.isNull():
-            print("Warning: splash image not found!")
-
         label = QLabel()
-        scaled_pixmap = pixmap.scaled(width // 2, height // 2, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        label.setPixmap(scaled_pixmap)
+        if not pixmap.isNull():
+            scaled_pixmap = pixmap.scaled(width // 2, height // 2, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            label.setPixmap(scaled_pixmap)
         label.setAlignment(Qt.AlignCenter)
 
         # Title
-        message_label = QLabel("Geowagdy with Tabs!")
+        message_label = QLabel("Geowagdy")
         message_label.setAlignment(Qt.AlignCenter)
         message_label.setFont(QFont("Times", 30, QFont.ExtraBold))
         message_label.setStyleSheet("color: white;")
 
         # Slogan
-        slogan = QLabel("Solve and plot multiple function pairs in separate tabs!")
+        slogan = QLabel("Solve and plot multiple functions")
         slogan.setAlignment(Qt.AlignCenter)
         slogan.setFont(QFont("Arial", 13, QFont.ExtraBold))
         slogan.setStyleSheet("color: yellow;")
@@ -365,13 +447,11 @@ class SplashScreen(QWidget):
             self.close()
             self.main_window.show()
 
-##############################################################################
-# 4) main() entry point
-##############################################################################
+
 def main():
     app = QApplication(sys.argv)
 
-    # Create the main window (with QTabWidget inside)
+    # Create the main window
     window = MainWindow()
 
     # Create and show the splash screen
