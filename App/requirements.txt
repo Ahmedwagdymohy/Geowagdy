@@ -4,3 +4,4 @@ sympy==1.9
 pytest==7.2.0
 pytest-qt==4.0.2
 numpy==1.23.0
+adjustText
