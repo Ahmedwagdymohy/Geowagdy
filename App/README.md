@@ -86,6 +86,7 @@ On startup, you’ll see a single tab containing:
 
 ---
 
+
 ## Running Automated Tests
 
 Ensure you have `pytest` and `pytest-qt` installed:

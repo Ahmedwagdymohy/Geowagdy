@@ -1,4 +1,5 @@
 # GeoWagdy - Function Intersection Plotter
+![alt text](Images/1.png)
 
 **GeoWagdy** is a Python desktop application (built with **PySide2**) that helps you:
 - Enter two **mathematical functions** of `x`.
@@ -21,39 +22,45 @@
 
 ## Features
 - **GUI** with a **Splash Screen** and **Progress Bar**.
+- ![alt text](Images/newtab.jpg)
 - **Multiple Tabs** (each is an independent plotting environment).
+- ![alt text](Images/exportplot.jpg)
 - **Plot** with embedded **Matplotlib**.
 - **Accepts** operators: `+`, `-`, `*`, `/`, `^` (as `**`), `log10()`, `sqrt()`, etc.
 - **Solves** for real intersections using **Sympy**.
 - **Exports** your plot to `png`/`jpeg`.
+- ![alt text](Images/saveplot.jpg)
 - **Help** menu to open an external documentation link.
+- ![alt text](Images/help.jpg)
 - **Automated Tests** with `pytest` and `pytest-qt`.
-
+- ![alt text](image.png)
 ---
 
-## Installation
+
+
+
+## Download :
+  - ### For Windows:
+   
+
+  - ### For Linux:
+
+
+
+
+
+
+
+
+## If you want to use the source code instead of Downloading the exe file
 1. **Python 3.9+** is recommended (though 3.6+ may work).
 2. Install the required dependencies:
+
    ```bash
-   pip install PySide2 matplotlib sympy adjustText pytest pytest-qt
+   pip install -r requirements.txt
+   ```
 
-
-Here's your **README.md** file:
-
-```markdown
-# Function Intersection Plotter
-
-## Setup
-
-Depending on your environment, you may need to create a virtual environment:
-
-```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-pip install -r requirements.txt
-```
-
----
+   ---
 
 ## How to Run
 
