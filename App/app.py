@@ -2,6 +2,15 @@ import sys
 import math
 import traceback
 import re
+from PySide2.QtCore import Qt 
+from PySide2.QtWidgets import QApplication, QSplashScreen
+from PySide2.QtGui import QPixmap, QFont
+from PySide2.QtCore import QTimer
+
+
+from PySide2.QtWidgets import QDesktopWidget
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
 
 from PySide2.QtWidgets import (
     QApplication,
@@ -14,19 +23,24 @@ from PySide2.QtWidgets import (
     QPushButton,
     QMessageBox
 )
-from PySide2.QtCore import Qt
 
-# Matplotlib imports
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
-from matplotlib.figure import Figure
 
-# We will use sympy for symbolic parsing and solving
+
 import sympy
 from sympy.parsing.sympy_parser import (
     parse_expr,
     standard_transformations,
     implicit_multiplication_application
 )
+
+
+
+
+
+
+
+
+
 
 
 class MplCanvas(FigureCanvasQTAgg):
@@ -202,7 +216,7 @@ class MainWindow(QMainWindow):
             annotation_text = f"Solution {i}: x={sol_x:.4f}, y={sol_y:.4f}"
             txt = self.canvas.axes.text(sol_x, sol_y, annotation_text)
             texts.append(txt)
-        
+
         # After plotting all text, call:
         adjust_text(texts, ax=self.canvas.axes)
 
@@ -275,13 +289,79 @@ class MainWindow(QMainWindow):
         return expr_sympy
 
 
+class SplashScreen(QWidget):
+    def __init__(self, main_window_width, main_window_height):
+        super().__init__()
+
+        # Get screen geometry
+        screen_geometry = QApplication.primaryScreen().geometry()
+
+        # Calculate position to center the splash screen
+        #x = (screen_geometry.width() - main_window_width) // 2
+        #y = (screen_geometry.height() - main_window_height) // 2
+
+        # Set splash screen size and position
+        self.setGeometry(50, 50, main_window_width, main_window_height)
+        self.setStyleSheet("background-color: black; border-radius: 10px;")  # Optional: rounded corners
+
+        # Layout for centering the content
+        layout = QVBoxLayout()
+        layout.setAlignment(Qt.AlignCenter)
+
+        # Load and scale the splash image
+        pixmap = QPixmap("pngwing.com.png")  # Update with your actual image path
+        if pixmap.isNull():
+            print("Error: Splash image not found!")
+            return
+
+        label = QLabel(self)
+        scaled_pixmap = pixmap.scaled(main_window_width // 2,
+                                      main_window_height // 2,
+                                      Qt.KeepAspectRatio,
+                                      Qt.SmoothTransformation)
+        label.setPixmap(scaled_pixmap)
+        label.setAlignment(Qt.AlignCenter)
+
+        # Message label
+        message_label = QLabel("GeoWagdy!", self)
+        message_label.setAlignment(Qt.AlignCenter)
+        message_label.setFont(QFont("Arial", 18, QFont.Bold))
+        message_label.setStyleSheet("color: white;")
+
+        # Add widgets to layout
+        layout.addWidget(label)
+        layout.addWidget(message_label)
+        self.setLayout(layout)
+
+        # Make it frameless
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+
+
 def main():
     """
     Main entry point for the application.
     """
     app = QApplication(sys.argv)
+
+    # Main window size
+    main_window_width = 800
+    main_window_height = 600
+
+    # Create the splash screen with the same size as the main window
+    splash = SplashScreen(main_window_width, main_window_height)
+    splash.show()
+
+    # Process events to ensure the splash is drawn
+    app.processEvents()
+
+    # Create main window
     window = MainWindow()
-    window.show()
+    window.setGeometry(splash.geometry())  # Ensure the main window appears in the same position
+
+    # Close splash and show main window after 3 seconds
+    QTimer.singleShot(3000, splash.close)
+    QTimer.singleShot(3000, window.show)
+
     sys.exit(app.exec_())
 
 
