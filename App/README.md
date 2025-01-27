@@ -31,17 +31,6 @@
 
 ---
 
-## Installation
-1. **Python 3.9+** is recommended (though 3.6+ may work).
-2. Install the required dependencies:
-   ```bash
-   pip install PySide2 matplotlib sympy adjustText pytest pytest-qt
-
-
-Here's your **README.md** file:
-
-```markdown
-# Function Intersection Plotter
 
 ## Setup
 
