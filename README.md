@@ -28,7 +28,6 @@
 - ![alt text](Images/exportplot.jpg)
 - **Plot** with embedded **Matplotlib**.
 - **Accepts** operators: `+`, `-`, `*`, `/`, `^` (as `**`), `log10()`, `sqrt()`, etc.
-- **Solves** for real intersections using **Sympy**.
 - **Exports** your plot to `png`/`jpeg`.
 - ![alt text](Images/saveplot.jpg)
 - **Help** menu to open an external documentation link.
@@ -40,7 +39,7 @@
 
 
 
-## Download :
+# Download :
   - ### For Windows:
    
 
