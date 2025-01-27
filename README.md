@@ -41,10 +41,10 @@
 
 # Download :
   - ### For Windows:
-   
+     [ Download here](https://drive.google.com/drive/folders/13xZ1umaWXk3LVXUPH-CGjHycvm-t18UC?usp=sharing)
 
   - ### For Linux:
-
+     [ Download here](https://drive.google.com/drive/folders/1y1QmcobBEuZgIOPaY1ntj3VrasRpJGUf?usp=sharing)
 
 
 
