@@ -22,6 +22,7 @@
 
 ## Features
 - **GUI** with a **Splash Screen** and **Progress Bar**.
+- ![alt text](<Images/Screenshot from 2025-01-27 15-22-10.png>)
 - ![alt text](Images/newtab.jpg)
 - **Multiple Tabs** (each is an independent plotting environment).
 - ![alt text](Images/exportplot.jpg)
