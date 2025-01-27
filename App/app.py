@@ -2,18 +2,14 @@ import sys
 import math
 import traceback
 import re
-from PySide2.QtCore import Qt 
-from PySide2.QtWidgets import QApplication, QSplashScreen
-from PySide2.QtGui import QPixmap, QFont
-from PySide2.QtCore import QTimer
 
-
-from PySide2.QtWidgets import QDesktopWidget
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
-from matplotlib.figure import Figure
-
+from PySide2.QtCore import Qt, QTimer
+from PySide2.QtGui import QFont, QPixmap
 from PySide2.QtWidgets import (
     QApplication,
+    QSplashScreen,
+    QProgressBar,
+    QDesktopWidget,
     QMainWindow,
     QWidget,
     QVBoxLayout,
@@ -21,10 +17,12 @@ from PySide2.QtWidgets import (
     QLabel,
     QLineEdit,
     QPushButton,
-    QMessageBox
+    QMessageBox,
+    QTabWidget,
+    QTabBar,
+    QMenuBar,
+    QAction
 )
-
-
 
 import sympy
 from sympy.parsing.sympy_parser import (
@@ -33,20 +31,15 @@ from sympy.parsing.sympy_parser import (
     implicit_multiplication_application
 )
 
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from matplotlib.figure import Figure
 
-
-
-
-
-
-
-
-
-
+##############################################################################
+# 1) A reusable PlotWidget class (replacing your old MainWindow code).
+#    Inherits from QWidget, so we can embed it in a tab.
+##############################################################################
 class MplCanvas(FigureCanvasQTAgg):
-    """
-    A custom canvas to display matplotlib plots within a PySide2 widget.
-    """
+    """A custom canvas to display matplotlib plots within a PySide2 widget."""
     def __init__(self, parent=None, width=5, height=4, dpi=100):
         fig = Figure(figsize=(width, height), dpi=dpi)
         self.axes = fig.add_subplot(111)
@@ -54,22 +47,22 @@ class MplCanvas(FigureCanvasQTAgg):
         self.setParent(parent)
 
 
-class MainWindow(QMainWindow):
+class PlotWidget(QWidget):
     """
-    Main window of the application. Contains:
-    - Two QLineEdits for user input of functions.
-    - A button to solve and plot.
-    - An embedded Matplotlib canvas for plotting.
+    A widget for:
+      - Two QLineEdits to input functions.
+      - A "Solve + Plot" button.
+      - An embedded Matplotlib canvas.
+    
+    This was refactored from your old MainWindow code so it can be used as a tab.
     """
-    def __init__(self):
-        super().__init__()
-        self.setWindowTitle("Geowagdy")
+    def __init__(self, parent=None):
+        super().__init__(parent)
 
-        # Main widget and layout
-        main_widget = QWidget()
-        main_layout = QVBoxLayout(main_widget)
+        # Main vertical layout
+        main_layout = QVBoxLayout(self)
 
-        # Layout for function inputs
+        # Row for function inputs
         input_layout = QHBoxLayout()
         self.label_f1 = QLabel("f1(x):")
         self.edit_f1 = QLineEdit()
@@ -79,7 +72,6 @@ class MainWindow(QMainWindow):
         self.edit_f2 = QLineEdit()
         self.edit_f2.setPlaceholderText("e.g. 2x or 2*x")
 
-        # Add widgets to input layout
         input_layout.addWidget(self.label_f1)
         input_layout.addWidget(self.edit_f1)
         input_layout.addWidget(self.label_f2)
@@ -87,30 +79,28 @@ class MainWindow(QMainWindow):
 
         # Solve button
         self.solve_button = QPushButton("Solve + Plot")
-        self.solve_button.clicked.connect(self.on_solve_clicked)
+        # Example button styling
+        self.solve_button.setStyleSheet("background-color: #4CAF50; color: white; padding: 6px;")
 
         # Plot canvas
         self.canvas = MplCanvas(self, width=5, height=4, dpi=100)
 
-        # Add sub-layouts to main layout
+        # Add everything to main_layout
         main_layout.addLayout(input_layout)
         main_layout.addWidget(self.solve_button)
         main_layout.addWidget(self.canvas)
 
-        self.setCentralWidget(main_widget)
-        self.setMinimumSize(800, 600)
-
+        # Connect signals
+        self.solve_button.clicked.connect(self.on_solve_clicked)
 
     def on_solve_clicked(self):
         """
-        Slot triggered when the user clicks the "Solve & Plot" button.
-        Attempts to parse the two functions, solve for all real intersections,
-        and plot the functions along with the solution points if they exist.
+        Solve f1(x)=f2(x) for x (all real solutions), then plot the functions and mark solutions.
         """
         f1_str = self.edit_f1.text().strip()
         f2_str = self.edit_f2.text().strip()
 
-        # Validate non-empty input
+        # Validate input
         if not f1_str or not f2_str:
             self.show_error_message("Both function fields must be filled.")
             self.clear_plot()
@@ -121,10 +111,8 @@ class MainWindow(QMainWindow):
             expr_f1 = self.string_to_sympy_expr(f1_str)
             expr_f2 = self.string_to_sympy_expr(f2_str)
 
-            # Define a symbol for x
+            # Solve
             x = sympy.Symbol('x', real=True)
-
-            # Solve the equation f1(x) = f2(x) -> f1(x) - f2(x) = 0
             solutions = sympy.solve(sympy.Eq(expr_f1, expr_f2), x, dict=True)
 
             # Filter real solutions
@@ -139,88 +127,62 @@ class MainWindow(QMainWindow):
                 self.show_info_message("No real intersection found. Plotting both functions anyway.")
                 self.plot_functions(expr_f1, expr_f2, intersections=[])
             else:
-                # Convert each solution to float x and float y
                 intersections = []
                 for val in real_solutions:
                     float_x = float(val)
                     float_y = float(expr_f1.subs(x, float_x))
                     intersections.append((float_x, float_y))
 
-                # Plot the functions and all intersection points
-                self.plot_functions(expr_f1, expr_f2, intersections=intersections)
+                self.plot_functions(expr_f1, expr_f2, intersections)
 
         except Exception as e:
-            # Show error message if any exception occurs
             err_msg = f"An error occurred:\n{traceback.format_exc()}"
             self.show_error_message(err_msg)
 
     def plot_functions(self, expr_f1, expr_f2, intersections):
-        """
-        Clears the canvas and plots the two functions over a chosen range.
-        Marks and annotates all intersection points in `intersections` if not empty.
-
-        :param expr_f1: Sympy expression for f1(x)
-        :param expr_f2: Sympy expression for f2(x)
-        :param intersections: list of (x, y) real intersection points. May be empty.
-        """
-        self.canvas.axes.clear()
+        """Plot the two functions and mark intersection points."""
         import numpy as np
+        self.canvas.axes.clear()
+
         x_sym = sympy.Symbol('x', real=True)
 
-        # Decide the x-range for plotting
+        # Decide range
         if intersections:
-            # If we have intersections, pick range from min_x - 2 to max_x + 2
             xs = [pt[0] for pt in intersections]
             min_sol_x, max_sol_x = min(xs), max(xs)
             x_min = min_sol_x - 5
             x_max = max_sol_x + 5
         else:
-            # Default range if no intersection
             x_min, x_max = -10, 10
 
         x_vals = np.linspace(x_min, x_max, 400)
 
-        # Evaluate the functions, skipping complex results
         f1_vals = []
         f2_vals = []
         for val in x_vals:
             y1 = expr_f1.subs(x_sym, val)
             y2 = expr_f2.subs(x_sym, val)
+            f1_vals.append(float(y1) if y1.is_real else np.nan)
+            f2_vals.append(float(y2) if y2.is_real else np.nan)
 
-            # Convert y1 to float if real, otherwise NaN
-            if y1.is_real:
-                f1_vals.append(float(y1))
-            else:
-                f1_vals.append(np.nan)
-
-            # Convert y2 to float if real, otherwise NaN
-            if y2.is_real:
-                f2_vals.append(float(y2))
-            else:
-                f2_vals.append(np.nan)
-
-        # Plot the two functions
+        # Plot
         self.canvas.axes.plot(x_vals, f1_vals, label="f1(x)")
         self.canvas.axes.plot(x_vals, f2_vals, label="f2(x)")
 
-        # Draw x=0 and y=0 lines to represent axes
+        # Draw axes
         self.canvas.axes.axhline(0, color='black', linewidth=0.8)
         self.canvas.axes.axvline(0, color='black', linewidth=0.8)
 
-        # If we have intersection points, mark them all
-        from adjustText import adjust_text
-
-        texts = []
-        for i, (sol_x, sol_y) in enumerate(intersections, start=1):
-            self.canvas.axes.plot(sol_x, sol_y, 'ro')
-            annotation_text = f"Solution {i}: x={sol_x:.4f}, y={sol_y:.4f}"
-            txt = self.canvas.axes.text(sol_x, sol_y, annotation_text)
-            texts.append(txt)
-
-        # After plotting all text, call:
-        adjust_text(texts, ax=self.canvas.axes)
-
-
+        # Mark intersections
+        if intersections:
+            from adjustText import adjust_text
+            texts = []
+            for i, (sol_x, sol_y) in enumerate(intersections, start=1):
+                self.canvas.axes.plot(sol_x, sol_y, 'ro')
+                annotation_text = f"Solution {i}: x={sol_x:.4f}, y={sol_y:.4f}"
+                t = self.canvas.axes.text(sol_x, sol_y, annotation_text)
+                texts.append(t)
+            adjust_text(texts, ax=self.canvas.axes)
 
         self.canvas.axes.set_xlabel("x")
         self.canvas.axes.set_ylabel("y")
@@ -228,139 +190,194 @@ class MainWindow(QMainWindow):
         self.canvas.axes.legend()
         self.canvas.draw()
 
-
     def clear_plot(self):
-        """Clears the plot area."""
         self.canvas.axes.clear()
         self.canvas.draw()
 
-    def show_error_message(self, message):
-        """Display an error message box."""
-        msg_box = QMessageBox(self)
-        msg_box.setIcon(QMessageBox.Warning)
-        msg_box.setText(message)
-        msg_box.setWindowTitle("Error")
-        msg_box.exec_()
-        
+    ####################################################################
+    # Utility / Helper methods
+    ####################################################################
+    def show_error_message(self, msg):
+        QMessageBox.critical(self, "Error", msg, QMessageBox.Ok)
 
-    def show_info_message(self, message):
-        """Display an informational message box."""
-        msg_box = QMessageBox(self)
-        msg_box.setIcon(QMessageBox.Information)
-        msg_box.setText(message)
-        msg_box.setWindowTitle("Information")
-        msg_box.exec_()
-        
+    def show_info_message(self, msg):
+        QMessageBox.information(self, "Information", msg, QMessageBox.Ok)
 
     def string_to_sympy_expr(self, expr_str):
-        """
-        Safely converts the user-entered string into a Sympy expression.
-        Supports +, -, *, /, ^, log10(), sqrt(), and implicit multiplication
-        (e.g., "5x" -> "5*x").
-
-        1) Replace '^' with '**'.
-        2) Perform basic validation that only allowed characters are present.
-        3) Parse with Sympy's parse_expr and implicit multiplication.
-        """
-        from sympy.parsing.sympy_parser import parse_expr, standard_transformations, implicit_multiplication_application
-
-        # 1) Replace '^' with '**'
-        expr_str = expr_str.replace('^', '**')
-
-        # 2) Basic validation (optional but recommended to prevent malicious input).
-        #    For example, we allow digits, x, log10, sqrt, and typical math symbols.
+        """Parse the user's function string into a Sympy expression (with implicit multiplication)."""
+        expr_str = expr_str.replace('^', '**')  # Replace ^ with **
         safe_chars_regex = r"[0-9x\+\-\*/\(\)\.\s\*]"
         temp = expr_str.replace("log10", "").replace("sqrt", "")
         for char in temp:
             if not re.match(safe_chars_regex, char):
                 raise ValueError(f"Illegal character detected: '{char}' in {expr_str}")
 
-        # 3) Parse the string with implicit multiplication
         transformations = standard_transformations + (implicit_multiplication_application,)
-
         x = sympy.Symbol('x', real=True)
         local_dict = {
             "x": x,
             "log10": lambda arg: sympy.log(arg, 10),
             "sqrt": sympy.sqrt
         }
-
         expr_sympy = parse_expr(expr_str, local_dict=local_dict, transformations=transformations)
         return expr_sympy
 
+##############################################################################
+# 2) The MainWindow that holds a QTabWidget. Each tab is a PlotWidget instance.
+##############################################################################
+class MainWindow(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("GeoWagdy with Tabs")
+        self.setMinimumSize(1200, 800)
 
+        # Create a QTabWidget
+        self.tab_widget = QTabWidget()
+        # Apply the style for QTabWidget and QTabBar (from your reference)
+        self.tab_widget.setStyleSheet("""
+            QTabWidget::pane { /* The tab widget frame */
+                border-top: 2px solid #C2C7CB;
+            }
+            QTabWidget::tab-bar {
+                left: 5px; /* move to the right by 5px */
+            }
+            QTabBar::tab {
+                background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                            stop: 0 #E1E1E1, stop: 0.4 #DDDDDD,
+                                            stop: 0.5 #D8D8D8, stop: 1.0 #D3D3D3);
+                border: 2px solid #C4C4C3;
+                border-bottom-color: #C2C7CB; /* same as the pane color */
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+                min-width: 8ex;
+                padding: 2px;
+            }
+            QTabBar::tab:selected, QTabBar::tab:hover {
+                background: qlineargradient(x1: 0, y1: 0, x2: 0, y2: 1,
+                                            stop: 0 #fafafa, stop: 0.4 #f4f4f4,
+                                            stop: 0.5 #e7e7e7, stop: 1.0 #fafafa);
+            }
+            QTabBar::tab:selected {
+                border-color: #9B9B9B;
+                border-bottom-color: #C2C7CB; /* same as pane color */
+            }
+            QTabBar::tab:!selected {
+                margin-top: 2px; /* make non-selected tabs look smaller */
+            }
+        """)
+
+        # Make the tab widget the central widget of the main window
+        self.setCentralWidget(self.tab_widget)
+
+        # We'll add an initial tab
+        self.add_new_tab()
+
+        # We can optionally add a menu or a button to create new tabs
+        menubar = self.menuBar()
+        file_menu = menubar.addMenu("File")
+
+        new_tab_action = QAction("New Tab", self)
+        new_tab_action.triggered.connect(self.add_new_tab)
+        file_menu.addAction(new_tab_action)
+
+    def add_new_tab(self):
+        """Create a new PlotWidget and add it as a new tab."""
+        new_plot_widget = PlotWidget()
+        index = self.tab_widget.addTab(new_plot_widget, f"Plot {self.tab_widget.count() + 1}")
+        self.tab_widget.setCurrentIndex(index)
+
+##############################################################################
+# 3) The SplashScreen logic (with progress bar), then showing the MainWindow.
+##############################################################################
 class SplashScreen(QWidget):
-    def __init__(self, main_window_width, main_window_height):
+    def __init__(self, width, height, main_window):
         super().__init__()
 
-        # Get screen geometry
+        self.main_window = main_window  # reference to the real main window
+
         screen_geometry = QApplication.primaryScreen().geometry()
+        x = (screen_geometry.width() - width) // 2
+        y = (screen_geometry.height() - height) // 2
+        self.setGeometry(x, y, width, height)
+        self.setStyleSheet("background-color: black; border-radius: 10px;")
 
-        # Calculate position to center the splash screen
-        #x = (screen_geometry.width() - main_window_width) // 2
-        #y = (screen_geometry.height() - main_window_height) // 2
-
-        # Set splash screen size and position
-        self.setGeometry(50, 50, main_window_width, main_window_height)
-        self.setStyleSheet("background-color: black; border-radius: 10px;")  # Optional: rounded corners
-
-        # Layout for centering the content
         layout = QVBoxLayout()
         layout.setAlignment(Qt.AlignCenter)
 
-        # Load and scale the splash image
-        pixmap = QPixmap("pngwing.com.png")  # Update with your actual image path
+        # Example image
+        pixmap = QPixmap("1.png")
         if pixmap.isNull():
-            print("Error: Splash image not found!")
-            return
+            print("Warning: splash image not found!")
 
-        label = QLabel(self)
-        scaled_pixmap = pixmap.scaled(main_window_width // 2,
-                                      main_window_height // 2,
-                                      Qt.KeepAspectRatio,
-                                      Qt.SmoothTransformation)
+        label = QLabel()
+        scaled_pixmap = pixmap.scaled(width // 2, height // 2, Qt.KeepAspectRatio, Qt.SmoothTransformation)
         label.setPixmap(scaled_pixmap)
         label.setAlignment(Qt.AlignCenter)
 
-        # Message label
-        message_label = QLabel("GeoWagdy!", self)
+        # Title
+        message_label = QLabel("Geowagdy with Tabs!")
         message_label.setAlignment(Qt.AlignCenter)
-        message_label.setFont(QFont("Arial", 18, QFont.Bold))
+        message_label.setFont(QFont("Times", 30, QFont.ExtraBold))
         message_label.setStyleSheet("color: white;")
 
-        # Add widgets to layout
+        # Slogan
+        slogan = QLabel("Solve and plot multiple function pairs in separate tabs!")
+        slogan.setAlignment(Qt.AlignCenter)
+        slogan.setFont(QFont("Arial", 13, QFont.ExtraBold))
+        slogan.setStyleSheet("color: yellow;")
+
+        # Progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setFixedHeight(20)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setAlignment(Qt.AlignCenter)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid grey;
+                border-radius: 5px;
+                text-align: center;
+                color: white;
+            }
+            QProgressBar::chunk {
+                background-color: #05B8CC;
+                width: 20px;
+            }
+        """)
+
         layout.addWidget(label)
         layout.addWidget(message_label)
-        self.setLayout(layout)
+        layout.addWidget(slogan)
+        layout.addWidget(self.progress_bar)
 
-        # Make it frameless
+        self.setLayout(layout)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
 
+        self.progress_value = 0
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_progress)
+        self.timer.start(30)  # 30ms intervals
 
+    def update_progress(self):
+        self.progress_value += 1
+        self.progress_bar.setValue(self.progress_value)
+        if self.progress_value >= 100:
+            self.timer.stop()
+            self.close()
+            self.main_window.show()
+
+##############################################################################
+# 4) main() entry point
+##############################################################################
 def main():
-    """
-    Main entry point for the application.
-    """
     app = QApplication(sys.argv)
 
-    # Main window size
-    main_window_width = 800
-    main_window_height = 600
-
-    # Create the splash screen with the same size as the main window
-    splash = SplashScreen(main_window_width, main_window_height)
-    splash.show()
-
-    # Process events to ensure the splash is drawn
-    app.processEvents()
-
-    # Create main window
+    # Create the main window (with QTabWidget inside)
     window = MainWindow()
-    window.setGeometry(splash.geometry())  # Ensure the main window appears in the same position
 
-    # Close splash and show main window after 3 seconds
-    QTimer.singleShot(3000, splash.close)
-    QTimer.singleShot(3000, window.show)
+    # Create and show the splash screen
+    splash = SplashScreen(1200, 800, window)
+    splash.show()
+    app.processEvents()
 
     sys.exit(app.exec_())
 
