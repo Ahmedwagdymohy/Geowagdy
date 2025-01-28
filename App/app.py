@@ -3,8 +3,8 @@ import re
 import traceback
 import webbrowser
 
-from PySide2.QtCore import Qt, QTimer
-from PySide2.QtGui import QFont, QPixmap
+from PySide2.QtCore import Qt, QTimer, QPropertyAnimation, QRect
+from PySide2.QtGui import QFont, QPixmap, QColor, QIcon
 from PySide2.QtWidgets import (
     QApplication,
     QWidget,
@@ -20,7 +20,8 @@ from PySide2.QtWidgets import (
     QProgressBar,
     QDesktopWidget,
     QFileDialog,
-    QMenuBar
+    QMenuBar,
+    QGraphicsDropShadowEffect
 )
 
 import sympy
@@ -38,6 +39,7 @@ from matplotlib.figure import Figure
 #   - Dark background: #102B3F
 #   - Light backgrounds: #E2CFEA, #A6ECE0
 #   - Accent color: #DDA77B
+#   - Extra highlights or playful colors: #F06C9B, #FFC93C
 ##############################################################################
 
 
@@ -68,15 +70,40 @@ class PlotWidget(QWidget):
 
         # Row for function inputs
         input_layout = QHBoxLayout()
+
         self.label_f1 = QLabel("f1(x):")
-        self.label_f1.setStyleSheet("font-weight: bold; font-size: 18px;")
+        self.label_f1.setStyleSheet("font-weight: bold; font-size: 18px; color: #DDA77B;")
         self.edit_f1 = QLineEdit()
         self.edit_f1.setPlaceholderText("e.g. 5x + 3 or 5*x + 3")
+        self.edit_f1.setStyleSheet("""
+            QLineEdit {
+                border: 2px solid #71677C;
+                border-radius: 4px;
+                padding: 4px;
+                background-color: #FFFFFF;
+                color: #000000;
+            }
+            QLineEdit:focus {
+                border: 2px solid #DDA77B;
+            }
+        """)
 
         self.label_f2 = QLabel("f2(x):")
-        self.label_f2.setStyleSheet("font-weight: bold; font-size: 18px;")
+        self.label_f2.setStyleSheet("font-weight: bold; font-size: 18px; color: #DDA77B;")
         self.edit_f2 = QLineEdit()
         self.edit_f2.setPlaceholderText("e.g. 2x or 2*x")
+        self.edit_f2.setStyleSheet("""
+            QLineEdit {
+                border: 2px solid #71677C;
+                border-radius: 4px;
+                padding: 4px;
+                background-color: #FFFFFF;
+                color: #000000;
+            }
+            QLineEdit:focus {
+                border: 2px solid #DDA77B;
+            }
+        """)
 
         input_layout.addWidget(self.label_f1)
         input_layout.addWidget(self.edit_f1)
@@ -85,28 +112,39 @@ class PlotWidget(QWidget):
 
         # Solve button
         self.solve_button = QPushButton("Solve + Plot")
-        # Example button styling: background #DDA77B, hovered #A6ECE0
+        # Fancy styling with drop shadow
         self.solve_button.setStyleSheet("""
             QPushButton {
                 background-color: #131515;
                 color: white;
-                padding: 6px;
+                padding: 8px 14px;
                 font-weight: bold;
-                border-radius: 5px;
-                border-style: outset;
-                applyShadowOn= "hover", 
-                animateShadow = True, 
-                blurRadius = 150, 
-                animateShadowDuration = 500,
-                xOffset = 0,
-                yOffset = 0
-            )
-
+                font-size: 16px;
+                border-radius: 8px;
+                margin: 6px 0;
             }
             QPushButton:hover {
-                background-color: #A6ECE0;
+                background-color: #FFC93C;
+                color: #131515;
             }
         """)
+        self.solve_button.setToolTip("Click me to solve and plot the intersection of f1(x) and f2(x).")
+
+        # Add a soft drop shadow effect to the button
+        shadow_effect = QGraphicsDropShadowEffect(self)
+        shadow_effect.setBlurRadius(20)
+        shadow_effect.setXOffset(0)
+        shadow_effect.setYOffset(0)
+        shadow_effect.setColor(QColor("#F06C9B"))  # Pinkish shadow
+        self.solve_button.setGraphicsEffect(shadow_effect)
+
+        # We can animate the blurRadius of the shadow for a subtle pulse effect
+        self.shadow_animation = QPropertyAnimation(shadow_effect, b"blurRadius")
+        self.shadow_animation.setStartValue(20)
+        self.shadow_animation.setEndValue(40)
+        self.shadow_animation.setDuration(1000)
+        self.shadow_animation.setLoopCount(-1)
+        self.shadow_animation.start()
 
         # Plot canvas
         self.canvas = MplCanvas(self, width=5, height=4, dpi=100)
@@ -182,7 +220,6 @@ class PlotWidget(QWidget):
             x_min, x_max = -10, 10
 
         x_vals = np.linspace(x_min, x_max, 400)
-
         f1_vals = []
         f2_vals = []
         for val in x_vals:
@@ -191,28 +228,32 @@ class PlotWidget(QWidget):
             f1_vals.append(float(y1) if y1.is_real else np.nan)
             f2_vals.append(float(y2) if y2.is_real else np.nan)
 
+        # Set a fun background color for the plot area
+        #self.canvas.axes.set_facecolor('#E2CFEA')
+        self.canvas.figure.set_facecolor('#A6ECE0')
+
         # Plot
-        self.canvas.axes.plot(x_vals, f1_vals, label="f1(x)")
-        self.canvas.axes.plot(x_vals, f2_vals, label="f2(x)")
+        self.canvas.axes.plot(x_vals, f1_vals, label="f1(x)", color="#F06C9B", linewidth=2)
+        self.canvas.axes.plot(x_vals, f2_vals, label="f2(x)", color="#05B8CC", linewidth=2)
 
         # Draw axes
         self.canvas.axes.axhline(0, color='black', linewidth=0.8)
         self.canvas.axes.axvline(0, color='black', linewidth=0.8)
 
-        # Mark intersectionsfont-size: 18px;
+        # Mark intersections
         if intersections:
             from adjustText import adjust_text
             texts = []
             for i, (sol_x, sol_y) in enumerate(intersections, start=1):
                 self.canvas.axes.plot(sol_x, sol_y, 'ro')
                 annotation_text = f"Solution {i}: x={sol_x:.4f}, y={sol_y:.4f}"
-                t = self.canvas.axes.text(sol_x, sol_y, annotation_text)
+                t = self.canvas.axes.text(sol_x, sol_y, annotation_text, fontsize=9, color="#2B2A2A")
                 texts.append(t)
             adjust_text(texts, ax=self.canvas.axes)
 
-        self.canvas.axes.set_xlabel("x")
-        self.canvas.axes.set_ylabel("y")
-        self.canvas.axes.set_title("Intersection of f1(x) and f2(x)")
+        self.canvas.axes.set_xlabel("x", fontsize=12, color="#2B2A2A")
+        self.canvas.axes.set_ylabel("y", fontsize=12, color="#2B2A2A")
+        self.canvas.axes.set_title("Intersection of f1(x) and f2(x)", fontsize=14, color="#71677C")
         self.canvas.axes.legend()
         self.canvas.draw()
 
@@ -280,10 +321,18 @@ class MainWindow(QMainWindow):
         self.setWindowTitle("GeoWagdy")
         self.setMinimumSize(1200, 800)
 
-        # **Apply a background color** (#102B3F) to the entire QMainWindow
+        # Optionally set an app icon
+        # self.setWindowIcon(QIcon("path/to/your/icon.png"))
+
+        # **Apply a background gradient** to the entire QMainWindow
         self.setStyleSheet("""
             QMainWindow {
-                background-color: #102B3F;
+                background: qlineargradient(
+                    spread:pad,
+                    x1:0, y1:0, x2:1, y2:1,
+                    stop:0 #102B3F,
+                    stop:1 #71677C
+                );
             }
         """)
 
@@ -301,16 +350,18 @@ class MainWindow(QMainWindow):
             QTabBar::tab {
                 background: #71677C;
                 border: 2px solid #71677C;
-                border-bottom-color: #E2CFEA; /* same as the pane color */
+                border-bottom-color: #E2CFEA;
                 border-top-left-radius: 4px;
                 border-top-right-radius: 4px;
                 min-width: 8ex;
-                padding: 4px;
+                padding: 6px;
                 margin: 2px;
                 font-weight: bold;
+                color: white;
             }
             QTabBar::tab:selected, QTabBar::tab:hover {
                 background: #E2CFEA;
+                color: #71677C;
             }
             QTabBar::tab:selected {
                 border-color: #DDA77B;
@@ -341,18 +392,11 @@ class MainWindow(QMainWindow):
         export_action.triggered.connect(self.export_current_tab_plot)
         file_menu.addAction(export_action)
 
-
-
-
-        #######################################
-        #adding new help tab
-        ######################################
+        # Help menu
         help_menu = menubar.addMenu("Help")
         open_help_action = QAction("Open Help Link", self)
-    
         help_url = "https://github.com/Ahmedwagdymohy/Geowagdy"
         open_help_action.triggered.connect(lambda: webbrowser.open(help_url))
-
         help_menu.addAction(open_help_action)
 
     def add_new_tab(self):
@@ -366,11 +410,6 @@ class MainWindow(QMainWindow):
         current_widget = self.tab_widget.currentWidget()
         if isinstance(current_widget, PlotWidget):
             current_widget.export_plot()
-
-
-
-
-
 
 
 class SplashScreen(QWidget):
